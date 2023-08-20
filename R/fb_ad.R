@@ -1,50 +1,31 @@
 #' Create ad
 #' @inheritParams fbad_request
 #' @param name Ad group name
-#' @param campaign_id Ad Set id (v2.4)
-#' @param adset_id Ad Set id (v2.5)
+#' @param adset_id Ad Set id
 #' @param creative_id creative ID
-#' @param adgroup_status initial status of the Ad group (v2.4)
-#' @param status initial status of the Ad group (v2.5)
+#' @param status initial status of the Ad group
 #' @param ... further parameters passed to the Facebook API
 #' @return ad id
 #' @export
-#' @references \url{https://developers.facebook.com/docs/marketing-api/reference/adgroup/v2.5#Creating}
+#' @references \url{https://developers.facebook.com/docs/marketing-api/reference/adgroup#Creating}
 fbad_create_ad <- function(fbacc,
                            name,
-                           ## v2.4
-                           campaign_id,
-                           ## v2.5
                            adset_id,
                            creative_id,
-                           adgroup_status = c('ACTIVE', 'PAUSED'),
                            status = c('ACTIVE', 'PAUSED'),...) {
 
     fbacc <- fbad_check_fbacc()
-    stopifnot(!missing(name),
-              !missing(campaign_id) | !missing(adset_id),
-              !missing(creative_id))
+    stopifnot(!missing(name), !missing(adset_id), !missing(creative_id))
 
     ## initial status of the ad to be created
     status <- match.arg(status)
-    if (!missing(adgroup_status)) {
-        warning('"adgroup_status" argument is deprecated, use "status" instead from v2.5')
-        status <- match.arg(adgroup_status)
-    }
 
     ## build params list
     params <- list(
-        name           = name,
-        creative       = toJSON(list(creative_id = unbox(creative_id))))
-
-    ## different campaign names in v2.4 VS v2.5
-    if (fb_api_version() < '2.5') {
-        params$campaign_id    <-  campaign_id
-        params$adgroup_status <- status
-    } else {
-        params$adset_id <- adset_id
-        params$status   <- status
-    }
+        name     = name,
+        creative = toJSON(list(creative_id = unbox(creative_id))),
+        adset_id = adset_id,
+        status   = status)
 
     ## add further params if provided
     if (length(list(...)) > 0) {
@@ -53,13 +34,12 @@ fbad_create_ad <- function(fbacc,
 
     ## get results
     res <- fbad_request(fbacc,
-        path   = paste0('act_', fbacc$account_id,
-                        ifelse(fb_api_version() < '2.5', '/adgroups', '/ads')),
+        path   = paste0('act_', fbacc$account_id, '/ads'),
         method = "POST",
         params = params)
 
     ## return campaign ID on success
-    fromJSON(res)$id
+    fromJSONish(res)$id
 
 }
 
@@ -68,10 +48,11 @@ fbad_create_ad <- function(fbacc,
 #' @inheritParams fbad_request
 #' @param id ad id(s)
 #' @param fields character vector of fields to get from the API, defaults to \code{id}. Please refer to the Facebook documentation for a list of possible values.
+#' @param simplify return \code{data.frame} or \code{list}
 #' @return data.frame
 #' @note Will do a batched request to the Facebook API if multiple ids are provided.
 #' @export
-#' @references \url{https://developers.facebook.com/docs/marketing-api/reference/adgroup/v2.5#Reading}
+#' @references \url{https://developers.facebook.com/docs/marketing-api/reference/adgroup#Reading}
 #' @examples \dontrun{
 #' ## get and Ad ID from yesterday
 #' adid <- fb_insights(date_preset = 'yesterday', level = 'ad')[[1]]$ad_id[1]
@@ -79,7 +60,7 @@ fbad_create_ad <- function(fbacc,
 #' fbad_read_ad(id = adid, fields = c('effective_status'))
 #' }
 #' @importFrom data.table rbindlist setDF
-fbad_read_ad <- function(fbacc, id, fields = 'id') {
+fbad_read_ad <- function(fbacc, id, fields = 'id', simplify = TRUE) {
 
     fbacc <- fbad_check_fbacc()
 
@@ -97,7 +78,11 @@ fbad_read_ad <- function(fbacc, id, fields = 'id') {
                             path   = id,
                             params = list(fields = fields),
                             method = "GET")
-        return(as.data.frame(fromJSON(res), stringsAsFactors = FALSE))
+        res <- fromJSONish(res)
+        if (simplify) {
+            res <- as.data.frame(res, stringsAsFactors = FALSE)
+        }
+        return(res)
     }
 
     ## or do batched query
@@ -113,13 +98,44 @@ fbad_read_ad <- function(fbacc, id, fields = 'id') {
                                     fields = fields),
                                 method = "GET")
 
-            rbindlist(lapply(fromJSON(res),
-                             as.data.frame, stringsAsFactors = FALSE), fill = TRUE)
+            res <- fromJSONish(res)
+            if (simplify) {
+                res <- rbindlist(lapply(res, as.data.frame, stringsAsFactors = FALSE), fill = TRUE)
+            }
+            res
 
         })
 
     ## return
-    setDF(rbindlist(res, fill = TRUE))
+    if (simplify) {
+        res <- setDF(rbindlist(res, fill = TRUE))
+    } else {
+        ## unlist nested list due to split
+        names(res) <- NULL
+        res <- unlist(res, recursive = FALSE)
+    }
+    res
+
+}
+
+
+#' Preview ad
+#' @inheritParams fbad_request
+#' @param id ad id(s)
+#' @param ad_format string
+#' @export
+#' @references \url{https://developers.facebook.com/docs/marketing-api/generatepreview}
+fbad_preview_ad <- function(fbacc, id, ad_format = c(
+    'DESKTOP_FEED_STANDARD', 'RIGHT_COLUMN_STANDARD',
+    'MOBILE_FEED_STANDARD', 'MOBILE_BANNER', 'MOBILE_INTERSTITIAL',
+    'INSTAGRAM_STANDARD')) {
+
+    fbacc <- fbad_check_fbacc()
+    ad_format <- match.arg(ad_format)
+    fromJSONish(fbad_request(fbacc,
+                          path   = file.path(id, 'previews'),
+                          params = list(ad_format = ad_format),
+                          method = "GET"))$data$body
 
 }
 
@@ -130,7 +146,7 @@ fbad_read_ad <- function(fbacc, id, fields = 'id') {
 #' @param ... parameters passed to Facebook API
 #' @return invisible TRUE
 #' @export
-#' @references \url{https://developers.facebook.com/docs/marketing-api/reference/adgroup/v2.5#Updating}
+#' @references \url{https://developers.facebook.com/docs/marketing-api/reference/adgroup#Updating}
 fbad_update_ad <- function(fbacc, id, ...) {
 
     fbacc <- fbad_check_fbacc()
@@ -147,7 +163,7 @@ fbad_update_ad <- function(fbacc, id, ...) {
                         method = "POST")
 
     ## success
-    invisible(fromJSON(res)$success)
+    invisible(fromJSONish(res)$success)
 
 }
 
@@ -157,11 +173,12 @@ fbad_update_ad <- function(fbacc, id, ...) {
 #' @param id will do the look-up for all Ads based on this ID. Defaults to current FB account. Can be a (vector of) Ad Set or Campaign id(s).
 #' @param statuses character vector of statuses to use as a filter. Defaults to none. Please refer to the Facebook documentation for a list of possible values.
 #' @param fields character vector of fields to get from the API, defaults to \code{id}. Please refer to the Facebook documentation for a list of possible values.
+#' @param simplify boolean whether response is simplified to data.frame or else returned as raw list
 #' @return data.frame
 #' @note Will do a batched request to the Facebook API if multiple ids are provided.
 #' @export
-#' @references \url{https://developers.facebook.com/docs/marketing-api/reference/adgroup/v2.5#read-adaccount}
-fbad_list_ad <- function(fbacc, id, statuses, fields = 'id') {
+#' @references \url{https://developers.facebook.com/docs/marketing-api/reference/adgroup#read-adaccount}
+fbad_list_ad <- function(fbacc, id, statuses, fields = 'id', simplify = TRUE) {
 
     fbacc <- fbad_check_fbacc()
 
@@ -176,25 +193,7 @@ fbad_list_ad <- function(fbacc, id, statuses, fields = 'id') {
 
     ## filter for status
     if (!missing(statuses)) {
-
-        if (fb_api_version() < '2.5') {
-
-            params$adgroup_status <- toJSON(statuses)
-
-            ## update filter name for Ad Sets and Campaigns
-            if (fn == 'fbad_list_adset') {
-                names(params)[3] <- 'campaign_status'
-            }
-            if (fn == 'fbad_list_campaign') {
-                names(params)[3] <- 'campaign_group_status'
-            }
-
-        } else {
-
-            params$effective_status <- toJSON(statuses)
-
-        }
-
+        params$effective_status <- toJSON(statuses)
     }
 
     ## default ID for current Ad Account
@@ -204,12 +203,10 @@ fbad_list_ad <- function(fbacc, id, statuses, fields = 'id') {
 
     ## API endpoint
     endpoint <- switch(fn,
-                       'fbad_list_ad'       = ifelse(fb_api_version() < '2.5',
-                                                     'adgroups', 'ads'),
-                       'fbad_list_adset'    = ifelse(fb_api_version() < '2.5',
-                                                     'adcampaigns', 'adsets'),
-                       'fbad_list_campaign' = ifelse(fb_api_version() < '2.5',
-                                                     'adcampaign_groups', 'campaigns'))
+                       'fbad_list_ad'       = 'ads',
+                       'fbad_list_adset'    = 'adsets',
+                       'fbad_list_campaign' = 'campaigns',
+                       'fbad_list_audience' = 'customaudiences')
 
     ## paged query for one id
     if (length(id) == 1) {
@@ -220,19 +217,22 @@ fbad_list_ad <- function(fbacc, id, statuses, fields = 'id') {
                             method = "GET")
 
         ## parse JSON
-        res <- fromJSON(res)
+        res <- fromJSONish(res)
 
         ## save data as list
         l <- list(res$data)
 
         ## get all pages (if any)
         while (!is.null(res$paging$'next')) {
-            res <- fromJSON(getURL(res$paging$'next'))
+            res <- fbad_request_next_page(res$paging$`next`)
             l   <- c(l, list(res$data))
         }
 
-        ## return data.frame
-        return(do.call(rbind, l))
+        ## return data.frame if simplify is true
+        if (simplify) {
+          l <- do.call(rbind, l)
+        }
+        return(l)
     }
 
     ## batched query for multiple ids (no need for paging)
@@ -253,15 +253,23 @@ fbad_list_ad <- function(fbacc, id, statuses, fields = 'id') {
                                         )),
                                 method = 'POST')
 
+            ## parse JSON
+            res <- lapply(fromJSONish(res)$body, function(x) fromJSONish(x)$data)
+
             ## transform data part of the list to data.frame
-            do.call(rbind, lapply(fromJSON(res)$body,
-                                  function(x) fromJSON(x)$data))
+            if (simplify) {
+                res <- do.call(rbind, res)
+            }
+
+            res
 
         })
 
     ## return merged data.frame
-    res <- do.call(rbind, res)
-    rownames(res) <- NULL
+    if (simplify) {
+        res <- do.call(rbind, res)
+        rownames(res) <- NULL
+    }
     res
 
 }

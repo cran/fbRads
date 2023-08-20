@@ -2,45 +2,54 @@
 
 This R package includes wrapper functions around the [Facebook Marketing API](https://developers.facebook.com/docs/marketing-apis) to create, read, update and delete custom audiences, images, campaigns, adsets, ads and related content.
 
-Vignette and more detailed documentation is coming soon, until then please see the [slides](http://bit.ly/domino-webinar-fbRads) presented at [useR! 2015](http://user2015.math.aau.dk/contributed_talks#210), [EARL 2015](https://earlconf.com/2015/boston/speakers/speaker.php?s=gergely_daroczi), the [Los Angeles R Users Group](http://www.meetup.com/Los-Angeles-R-Users-Group-Data-Science/events/226717454/) and at a [Domino Webinar](https://www.dominodatalab.com/resource/optimizing_facebook_campaigns_with_r).
+For more details, see the [slides](https://drive.google.com/file/d/0ByjOYacj5XqBeXZ2cVZrZ0V0S2c/view?usp=sharing) presented at [useR! 2015](https://user2015.math.aau.dk/contributed_talks#210), the [Los Angeles R Users Group](https://www.meetup.com/Los-Angeles-R-Users-Group-Data-Science/events/226717454/) and at a [Domino Webinar](https://www.youtube.com/watch?v=RY9pfnBRi-Q).
 
 ## Creating a Facebook App & connect with OAuth token
 
-To be able to use this package, you will have to create a Facebook App and authorize it to mange your Facebook ads. Basic steps to create an app with Development access level letting you manage up to 5 Facebook ad accounts:
+To be able to use this package, you will have to create a Facebook App and authorize it to manage your Facebook ads. Basic steps to create an app with Development access level letting you manage up to 5 Facebook ad accounts:
 
-1. Create new application at https://developers.facebook.com/apps with "basic setup".
-2. Fill in a unique `Display Name` (eg "app_testing_foobar_42"), set the category to eg "Business". Click on "Create App ID" & pass the captcha test.
-3. In "Settings/Basic", click "Add Platform" add create "Website" platform with the URL of http://localhost:1410/ and "localhost" as the "App Domain". Click "Save Changes".
-4. In the "Settings/Advanced" tab, add http://localhost:1410/ as the "Valid OAuth redirect URIs". Click "Save Changes".
-5. Note your "App ID" and "App Secret" on your dashboard, and use those in the below R script to get a token for future authentication:
-
-    ```r
-    library(httr)
-    app <- oauth_app('facebook', 'your app id', 'your app secret')
-    Sys.setenv('HTTR_SERVER_PORT' = '1410/')
-    tkn <- oauth2.0_token(
-        oauth_endpoints('facebook'), app, scope = 'ads_management',
-        type  = 'application/x-www-form-urlencoded', cache = FALSE)
-    tkn <- tkn$credentials$access_token
-    ```
-
-6. Please note the above last step: we store the token as a string. Now you can save that token in a safe place and start using `fbRads`, eg:
+1. Click on "Add a New App" at https://developers.facebook.com/apps
+2. Fill in a unique `Display Name` (eg "app_testing_foobar_42"), and provide your e-mail address. Click on "Create App ID" & pass the captcha test.
+3. Select the "Implement Marketing API" scenario that will automatically add the "Marketing API" to the "Products" section of the sidebar, or click on the "+" butting in the "Products" section of the sidebar
+4. Optionally associate your app with a Business Manager in the "Settings" screen of the "Marketing API"
+5. In the sidebar, select "Tools" from the "Marketing API" and generate a token
+6. Store your token in a secure place, and you are all set to start using `fbRads`, eg list all the Ad Account ids you can access:
 
     ```r
-    fbad_init(accountid = accountid, token = tkn, version = '2.5')
+    accounts <- fbad_get_my_ad_accounts(token)
     ```
 
-7. And list all your ads along with the ad name and status or eg filter for the active ads:
+7. Pick an Ad Account id from the returned list and initialize `fbRads` to use that Ad Account by default:
+
+    ```r
+    account <- sample(accounts$account_id, 1)
+    fbad_init(accountid = account, token = token)
+    ```
+
+8. Then list all your ads along with the ad name and status on that Ad Account:
 
     ```r
     fbad_list_ad(fields = c('name', 'effective_status'))
-    fbad_list_ad(statuses = 'ACTIVE', fields = 'name')
     ```
+
+9. Or eg filter for the active ads:
+
+   ```r
+   fbad_list_ad(statuses = 'ACTIVE', fields = 'name')
+   ```
+
+## Development version
+
+The package is actively maintained, but not frequently pushed to CRAN, so to use the most recent version, install from GitHub. The `master` branch is supposed to include a relatively stable version at all the time:
+
+```r
+devtools::install_github('daroczig/fbRads')
+```
 
 ## Using the package
 
-This package makes your life more convenient when it comes to interacting with the Facebook Marketing API, but unfortunately, it cannot save you the time to get familiar with the actual API. To be able to interact with Facebook, you have to learn about how the API works etc -- see the documentation at <https://developers.facebook.com/docs/marketing-apis>
+This package makes your life more convenient when it comes to interacting with the Facebook Marketing API, but unfortunately, it cannot save you the time to get familiar with the actual API endpoints. To be able to interact with Facebook, you have to learn about how the API works etc -- see the documentation at <https://developers.facebook.com/docs/marketing-apis>
 
 ---
 
-This package was developed and being maintained at [CARD.com](http://card.com), licensed under [AGPL-3](LICENSE).
+This package was originally developed at CARD.com, then maintained at System1. If you are interested in taking over the maintenance of this R package, please open a GH ticket.

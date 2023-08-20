@@ -1,7 +1,7 @@
 #' Returns the most recent version of the supported Facebook Marketing API
 #' @return string
 #' @export
-fb_api_most_recent_version <- function() '2.5'
+fb_api_most_recent_version <- function() '17.0'
 
 #' Returns the currently used version of the Facebook Marketing API
 #' @return string
@@ -60,35 +60,43 @@ fbad_check_curl_params <- function(params) {
 #' @param params a name-value list of form parameters for API query
 #' @param debug print debug messages by calling Curl verbosely
 #' @param log print log messages or suppress those
-#' @param version Facebook Marketing API version
+#' @param version Facebook Marketing API version, defaults to what was used in the most recent \code{fbad_init} function call or \code{fb_api_most_recent_version()} before such function call
 #' @param retries number of times the current query was tried previously -- used to handle network errors
 #' @return json object containing results
 #' @keywords internal
 #' @importFrom utils getFromNamespace URLencode capture.output str
-fbad_request <- function(fbacc, path, method = c('GET', 'POST', 'DELETE'), params = list(), debug = FALSE, log = TRUE, version = fb_api_most_recent_version(), retries = 0) {
+fbad_request <- function(fbacc, path, method = c('GET', 'POST', 'DELETE'), params = list(), debug = FALSE, log = TRUE, version, retries = 0) {
 
     mc     <- match.call()
     method <- match.arg(method)
 
     ## if token was not set in params, try to do that from fbacc
     if (is.null(params$access_token)) {
-        if (!missing(fbacc)) {
-            params$access_token <- fbad_check_fbacc()$access_token
-        } else {
+        if (missing(fbacc)) {
             params$access_token <- getFromNamespace('fbacc', 'fbRads')$access_token
+        } else {
+            params$access_token <- fbad_check_fbacc(fbacc)$access_token
         }
     }
 
     ## define Facebook API version to be used
-    if (missing(version) & !missing(fbacc)) {
-        version <- fbad_check_fbacc()$api_version
+    if (missing(version)) {
+        if (missing(fbacc)) {
+            if (is.FB_Ad_Account(getFromNamespace('fbacc', 'fbRads'))) {
+                version <- getFromNamespace('fbacc', 'fbRads')$api_version
+            } else {
+                version <- fb_api_most_recent_version()
+            }
+        } else {
+            version <- fbad_check_fbacc(fbacc)$api_version
+        }
     }
 
     ## check that params meet certain standards
     params <- fbad_check_curl_params(params)
 
     ## get body
-    b = basicTextGatherer()
+    b = basicTextGatherer(.mapUnicode = FALSE)
 
     ## get headers
     h = basicHeaderGatherer()
@@ -97,6 +105,9 @@ fbad_request <- function(fbacc, path, method = c('GET', 'POST', 'DELETE'), param
     if (debug) {
         print(params)
     }
+
+    ## remove prefix from the path if already provided
+    path <- sub(paste0('^https://graph.facebook.com/v', version, '/'), '', path)
 
     ## versioned API endpoint
     API_endpoint <- paste(
@@ -124,7 +135,9 @@ fbad_request <- function(fbacc, path, method = c('GET', 'POST', 'DELETE'), param
                                     cainfo    = system.file(
                                         'CurlSSL',
                                         'cacert.pem',
-                                        package = 'RCurl'))),
+                                        package = 'RCurl'),
+                                    connecttimeout = 3,
+                                    timeout = 300)),
                             error = function(e) e)
 
     } else {
@@ -144,7 +157,9 @@ fbad_request <- function(fbacc, path, method = c('GET', 'POST', 'DELETE'), param
                                                        'cacert.pem',
                                                        package = 'RCurl'),
                                                    crlf = ifelse(method == 'GET',
-                                                                 TRUE, FALSE)))),
+                                                                 TRUE, FALSE),
+                                                   connecttimeout = 3,
+                                                   timeout = 300))),
                             error = function(e) e)
     }
 
@@ -156,11 +171,16 @@ fbad_request <- function(fbacc, path, method = c('GET', 'POST', 'DELETE'), param
 
         ## temporary network issue?
         if (grepl('Network is unreachable', curlres$message) |
-            grepl('Empty reply from server', curlres$message)) {
+            grepl('Empty reply from server', curlres$message) |
+            grepl('Failed to connect to graph.facebook.com', curlres$message) |
+            grepl('(Connection|Operation|Resolving) timed out after', curlres$message) |
+            grepl('Unknown SSL protocol error', curlres$message) |
+            grepl('OpenSSL SSL_connect: SSL_ERROR_SYSCALL in connection to graph.facebook.com', curlres$message) |
+            grepl('OpenSSL SSL_read: SSL_ERROR_SYSCALL', curlres$message)) {
 
             ## log it
-            flog.error(paste('Possible network error:', curlres$message))
-            flog.info(paste('Retrying query for the', retries + 1, ' st/nd/rd time'))
+            log_error(paste('Possible network error:', curlres$message))
+            log_info(paste('Retrying query for the', retries + 1, ' st/nd/rd time'))
 
             ## give some chance for the system/network to recover
             Sys.sleep(2)
@@ -181,9 +201,9 @@ fbad_request <- function(fbacc, path, method = c('GET', 'POST', 'DELETE'), param
     if (inherits(res, 'error')) {
 
          if (log) {
-            flog.error(paste('URL: ', API_endpoint))
-            flog.error(paste('Method: ', method))
-            flog.error(paste('Params: ', paste(capture.output(str(params)), collapse = '\n')))
+            log_error(paste('URL: ', API_endpoint))
+            log_error(paste('Method: ', method))
+            log_error(paste('Params: ', paste(capture.output(str(params)), collapse = '\n')))
         }
 
         stop(paste(
@@ -203,22 +223,22 @@ fbad_request <- function(fbacc, path, method = c('GET', 'POST', 'DELETE'), param
 
         ## log details of the error
         if (log) {
-            flog.error(paste('URL: ', API_endpoint))
-            flog.error(paste('Method: ', method))
-            flog.error(paste('Params: ', paste(capture.output(str(params)), collapse = '\n')))
-            flog.error(paste('Header:', toJSON(headers)))
-            flog.error(paste('Body:', res))
+            log_error(paste('URL: ', API_endpoint))
+            log_error(paste('Method: ', method))
+            log_error(paste('Params: ', paste(capture.output(str(params)), collapse = '\n')))
+            log_error(paste('Header:', toJSON(headers)))
+            log_error(paste('Body:', res))
         }
 
         ## retry if Service (temporarily) Unavailable
-        if (headers$status %in% c('502', '503')) {
+        if (headers$status %in% c('502', '503', '504')) {
 
             ## give some chance for the system/network to recover
             Sys.sleep(2)
 
             ## retry the query for no more than 3 times
             if (retries < 3) {
-                flog.info(paste('Retrying query for the', retries + 1, ' st/nd/rd time'))
+                log_info(paste('Retrying query for the', retries + 1, ' st/nd/rd time'))
                 mc$retries <- retries + 1
                 return(eval(mc, envir = parent.frame()))
             }
@@ -226,33 +246,34 @@ fbad_request <- function(fbacc, path, method = c('GET', 'POST', 'DELETE'), param
         }
 
         ## something nasty happened that we cannot help (yet)
-        if (inherits(tryCatch(fromJSON(res), error = function(e) e), 'error') ||
-            is.null(fromJSON(res))) {
+        if (inherits(tryCatch(fromJSONish(res), error = function(e) e), 'error') ||
+            is.null(fromJSONish(res))) {
             stop('Some critical FB query error here.')
         }
 
         ## otherwise it's a JSON response
-        res <- fromJSON(res)
+        res <- fromJSONish(res)
 
         ## temporary "API Unknown" (1) or "API Service" (2) error at FB
-        if (res$error$code %in% 1:2) {
+        #if (res$error$code %in% 1:2) {
 
             ## log it
-            flog.error(paste('This is a temporary',
-                             shQuote(res$error$type),
-                             'FB error.'))
+            log_error(paste('This is a temporary',
+                            shQuote(res$error$type),
+                            'FB error:',
+                            res$error$message))
 
             ## give some chance for the system/network to recover
             Sys.sleep(2)
 
             ## retry the query for no more than 3 times
             if (retries < 3) {
-                flog.info(paste('Retrying query for the', retries + 1, ' st/nd/rd time'))
+                log_info(paste('Retrying query for the', retries + 1, ' st/nd/rd time'))
                 mc$retries <- retries + 1
                 return(eval(mc, envir = parent.frame()))
             }
 
-        }
+        #}
 
         ## fail with (hopefully) meaningful error message
         stop(res$error$message)
@@ -266,7 +287,7 @@ fbad_request <- function(fbacc, path, method = c('GET', 'POST', 'DELETE'), param
 
 
 #' Get details for a Facebook Ads Account
-#' @references \url{https://developers.facebook.com/docs/marketing-api/adaccount/v2.3}
+#' @references \url{https://developers.facebook.com/docs/marketing-api/reference/business/adaccount/}
 #' @param accountid Ads account graph object id
 #' @param token FB Ads API token
 #' @param version Facebook Marketing API version
@@ -281,7 +302,7 @@ fbad_get_adaccount_details  <- function(accountid, token, version) {
     ## Define which fields to get
     scope <- paste(
         c('name', 'account_id', 'account_status',
-          'age', 'amount_spent', 'balance', 'capabilities',
+          'age', 'amount_spent', ##'balance', ## 'capabilities',
           'end_advertiser', 'funding_source',
           'spend_cap', 'timezone_id', 'users'),
         collapse = ',')
@@ -296,14 +317,188 @@ fbad_get_adaccount_details  <- function(accountid, token, version) {
                 fields       = scope),
             version = version)
 
-    fromJSON(account_details)
+    fromJSONish(account_details)
+
+}
+
+
+#' Fetch the content of the URL and return JSON
+#' @param url next URL as returned by FB
+#' @keywords internal
+fbad_request_next_page <- function(url) {
+    url <- url_parse(url)
+    res <- fbad_request(path = url$path, method = 'GET', params = url$params, version = url$version)
+    fromJSONish(res)
+}
+
+#' Get account details of Ad Accounts owned by a Business Manager Account
+#' @references \url{https://developers.facebook.com/docs/marketing-api/business-asset-management#adaccounts}
+#' @param id Facebook Object, eg Ad Account (with \code{act} prefix) or a Business Manager Account ID
+#' @param token FB Ads API token (if running before \code{fb_init})
+#' @param version Facebook Marketing API version (if running before \code{fb_init})
+#' @param fields character vector
+#' @param simplify return \code{data.frame} or \code{list}
+#' @return list(s) containing account details
+#' @export
+fbad_get_owned_ad_accounts <- function(id, token, version, fields = c('name'), simplify = TRUE) {
+
+    ## look up function name to know what API endpoint to use
+    fn <- deparse(match.call()[[1]])
+
+    ## try to look up token and version if not provided
+    if (missing(token)) {
+        if (is.null(fbacc$access_token)) {
+            stop('Missing Facebook Ads API token')
+        }
+        token <- fbacc$access_token
+    }
+    if (missing(version)) {
+        if (is.null(fbacc$api_version)) {
+            version <- fb_api_most_recent_version()
+        } else {
+            version <- fbacc$api_version
+        }
+    }
+
+    res <- fromJSONish(fbad_request(
+        path   = file.path(id, switch(fn,
+                                      'fbad_get_client_ad_accounts' = 'client_ad_accounts',
+                                      'fbad_get_owned_ad_accounts' = 'owned_ad_accounts',
+                                      'fbad_get_adaccounts' = 'owned_ad_accounts',
+                                      'fbad_get_client_pages' = 'client_pages',
+                                      'fbad_get_owned_pages' = 'owned_pages',
+                                      'fbad_get_pixels' = 'adspixels')),
+        method = 'GET',
+        params = list(
+            access_token = token,
+            fields       = fields),
+        version = version))
+    data <- list(res$data)
+
+    ## iterate through all pages
+    while (!is.null(res$paging$`next`)) {
+        res  <- fbad_request_next_page(res$paging$`next`)
+        data <- c(data, list(res$data))
+    }
+
+    if (simplify) {
+        data <- do.call(rbind, data)
+    }
+
+    ## return
+    data
+
+}
+
+
+#' Get account details of Ad Accounts belonging to the clients of a Business Manager Account
+#' @inheritParams fbad_get_owned_ad_accounts
+#' @export
+fbad_get_client_ad_accounts <- fbad_get_owned_ad_accounts
+
+
+#' Deprecated in favor of \code{fbad_get_owned_adaccounts}
+#' @inheritParams fbad_get_owned_ad_accounts
+#' @export
+fbad_get_adaccounts <- fbad_get_owned_ad_accounts
+
+
+#' Get account details of Pages belonging to the clients of a Business Manager Account
+#' @inheritParams fbad_get_owned_ad_accounts
+#' @export
+fbad_get_client_pages <- fbad_get_owned_ad_accounts
+
+
+#' Get account details of Pages owned by a Business Manager Account
+#' @inheritParams fbad_get_owned_ad_accounts
+#' @export
+fbad_get_owned_pages <- fbad_get_owned_ad_accounts
+
+
+#' Get tracking pixels of eg an Ad or Business Manager Account
+#' @references \url{https://developers.facebook.com/docs/marketing-api/reference/ads-pixel/#Reading}
+#' @inheritParams fbad_get_owned_ad_accounts
+#' @param token FB Ads API token
+#' @param version Facebook Marketing API version
+#' @param fields character vector
+#' @return list(s) containing Ads Pixels
+#' @export
+fbad_get_pixels <- fbad_get_owned_ad_accounts
+
+
+#' Get account details of Ad Accounts that are accessible by the given token
+#' @inheritParams fbad_get_owned_ad_accounts
+#' @export
+#' @return character vector of Ad Account ids
+fbad_get_my_ad_accounts <- function(token, version) {
+
+    ## try to look up token and version if not provided
+    if (missing(token)) {
+        if (is.null(fbacc$access_token)) {
+            stop('Missing Facebook Ads API token')
+        }
+        token <- fbacc$access_token
+    }
+    if (missing(version)) {
+        if (is.null(fbacc$api_version)) {
+            version <- fb_api_most_recent_version()
+        } else {
+            version <- fbacc$api_version
+        }
+    }
+
+    res <- fromJSONish(fbad_request(
+        path   = 'me',
+        method = 'GET',
+        params = list(access_token = token, fields = 'adaccounts'),
+        version = version))[[1]]
+    data <- list(res$data)
+
+    ## iterate through all pages
+    while (!is.null(res$paging$`next`)) {
+        res  <- fbad_request_next_page(res$paging$`next`)
+        data <- c(data, list(res$data))
+    }
+
+    ## return
+    do.call(rbind, data)
+
+}
+
+
+#' Prints user id and name
+#' @inheritParams fbad_get_owned_ad_accounts
+#' @export
+#' @return character vector of Ad Account ids
+fbad_whoami <- function(token, version) {
+
+    ## try to look up token and version if not provided
+    if (missing(token)) {
+        if (is.null(fbacc$access_token)) {
+            stop('Missing Facebook Ads API token')
+        }
+        token <- fbacc$access_token
+    }
+    if (missing(version)) {
+        if (is.null(fbacc$api_version)) {
+            version <- fb_api_most_recent_version()
+        } else {
+            version <- fbacc$api_version
+        }
+    }
+
+    fromJSONish(fbad_request(
+        path   = 'me',
+        method = 'GET',
+        params = list(access_token = token, fields = 'id,name'),
+        version = version))
 
 }
 
 
 #' Initiate Facebook Account with OAuth token
 #'
-#' If you do not have a token, then register an (e.g. "Website") application at \url{https://developers.facebook.com/apps} and make a note of your "App ID" and "App Secret" at the "Dashboard" of your application. Then go to "Settings", click on "Add Platform", then "Website" and paste \code{http://localhost:1410} as the "Site URL". Save, and then run the below example R commands to get your token. Please note that your app needs access to your ads as well, see \url{https://developers.facebook.com/docs/marketing-api/access} for more details.
+#' If you do not have a token, then register an (e.g. "Website") application at \url{https://developers.facebook.com/apps} and make a note of your "App ID" and "App Secret" at the "Dashboard" of your application. Then go to "Settings", click on "Add Platform", then "Website" and paste \code{http://localhost:1410} as the "Site URL". Save, and then run the below example R commands to get your token. Please note that your app needs access to your ads as well, see \url{https://developers.facebook.com/docs/marketing-api/overview/authorization} for more details.
 #' @param accountid Facebook Ad account id without the \code{act_} prefix
 #' @param token Facebook OAuth token as a string
 #' @param version Facebook Marketing API version
@@ -322,15 +517,8 @@ fbad_get_adaccount_details  <- function(accountid, token, version) {
 #' @importFrom utils assignInMyNamespace
 fbad_init <- function(accountid, token, version = fb_api_most_recent_version()) {
 
-    if (version < '2.5') {
-        warning('FB Graph API v2.4 to be deprecated in a few days! Change to v2.5 ASAP.')
-    }
-    if (version < '2.4') {
-        warning('FB Graph API v2.3 and previous versions are deprecated now.')
-    }
-
-    flog.trace(paste0('Initializing connection to account ', accountid,
-                      ' via API v', version))
+    log_trace(paste0('Initializing connection to account ', accountid,
+                     ' via API v', version))
 
     ## API endpoint
     url <- paste(
@@ -379,7 +567,7 @@ fbad_check_fbacc <- function(fbacc) {
         ## manually passed fbacc object found in parent call
         if (!is.null(mc$fbacc)) {
 
-            fbacc <- eval.parent(mc$fbacc)
+            fbacc <- eval.parent(mc$fbacc, n = 2)
 
         } else {
 
@@ -397,7 +585,7 @@ fbad_check_fbacc <- function(fbacc) {
     }
 
     ## verify object type
-    if (!inherits(fbacc, 'FB_Ad_Account')) {
+    if (!is.FB_Ad_Account(fbacc)) {
         stop('Invalid R object passed as fbacc argument. See ?fbad_init for more details.')
     }
 
@@ -413,4 +601,12 @@ fbad_check_fbacc <- function(fbacc) {
 #' @export
 print.FB_Ad_Account <- function(x, ...) {
     cat(paste0('Facebook Ad API connection parameters for <<', x$name, '>>.'), '\n')
+}
+
+
+#' Checks if object is a valid initialized connection to the Facebook Marketing API
+#' @param fbacc R object with \code{FB_Ad_Account} class
+#' @keywords internal
+is.FB_Ad_Account <- function(fbacc) {
+    inherits(fbacc, 'FB_Ad_Account')
 }

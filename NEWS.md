@@ -1,0 +1,165 @@
+fbRads (2023-07-25)
+----------------------------------------------------------------
+
+Add support for Facebook Marketing API v17.0.
+
+Additional updates:
+
+* Switched from the futile.logger package to logger
+
+fbRads (2023-01-03)
+----------------------------------------------------------------
+
+Add support for Facebook Marketing API v15.0.
+
+fbRads (2022-08-07)
+----------------------------------------------------------------
+
+Add support for Facebook Marketing API v14.0.
+
+fbRads (2022-01-04)
+----------------------------------------------------------------
+
+Add support for Facebook Marketing API v12.0.
+
+fbRads (2021-04-21)
+----------------------------------------------------------------
+
+Add support for Facebook Marketing API v10.0.
+
+Additional features:
+
+* Added functions to copy campaign, ad set or ad (by @ArbenKqiku)
+
+fbRads (2020-09-16)
+----------------------------------------------------------------
+
+Add support for Facebook Marketing API v8.0.
+
+fbRads (2020-03-31)
+----------------------------------------------------------------
+
+Add support for Facebook Marketing API v6.0.
+
+fbRads (2019-10-24)
+----------------------------------------------------------------
+
+Add support for Facebook Marketing API v4.0.
+
+fbRads (2019-06-30)
+----------------------------------------------------------------
+
+Add support for Facebook Marketing API v3.3.
+
+fbRads (2019-01-10)
+----------------------------------------------------------------
+
+Add support for Facebook Marketing API v3.1.
+
+fbRads (2018-08-09)
+----------------------------------------------------------------
+
+Add support for Facebook Marketing API v3.0.
+
+fbRads 2.11.0 (2018-04-28)
+----------------------------------------------------------------
+
+Add support for Facebook Marketing API v2.11
+
+* get Pages and Ad Accounts of the clients of a Business Ad Account
+
+Fixes:
+
+* more standardized simplify argument when listing / reading Facebook objects
+* RCurl issues with Unicode characaters
+* further retries on (temporarily) SSL and network errors
+
+fbRads 2.10.0 (2017-11-01)
+----------------------------------------------------------------
+
+Add support for Facebook Marketing API v2.10
+
+Fixes:
+
+* further retries on (temporarily) SSL and network errors
+* improved malformed JSON parsing
+* improved paging of API results
+
+fbRads 2.9.0 (2017-07-21)
+----------------------------------------------------------------
+
+Add support for Facebook Marketing API v2.9:
+
+Fixes:
+
+* paging when listing all Ad Accounts on a Business Account
+* look-up pixels
+* simplify argument improvements
+* doc tweaks on how to generated a token
+
+fbRads 0.2 (2017-04-18)
+----------------------------------------------------------------
+
+Add support for Facebook Marketing API v2.8: #51
+
+Fixes:
+
+* remove line-breaks in malformed JSON returned by Facebook
+* simplify argument introduced for listing and reading Facebook objects
+
+fbRads 0.2 (2016-10-12)
+----------------------------------------------------------------
+
+Add support for Facebook Marketing API v2.7: #36
+
+* subtype for custom & lookalike audiences
+* business_management scope needed to manage ads
+
+Fixes:
+
+* return actual error message from Facebook
+* always retry failed sync Insights API requests as async
+
+fbRads 0.2 (2016-07-27)
+----------------------------------------------------------------
+
+Add support for Facebook Marketing API v2.6: #25
+
+Fixes:
+
+* timeout async queries after 45 mins
+* further retries on (temporarily) SSL and network errors
+
+fbRads 0.2 (2016-04-04)
+----------------------------------------------------------------
+
+Documentation cleanup and first CRAN release with support for
+Facebook Marketing API v2.4 and v2.5.
+
+fbRads 0.1 (2015-02-15)
+----------------------------------------------------------------
+
+Internal CARD.com R scripts were published publicicly as an
+open-source R package after Facebook made it's Marketing API
+generally available at the F8 2015 conference in March 2015.
+
+Supported API versions in the development verison of the
+package hosted on GitHub at https://github.com/cardcorp/fbRads:
+
+ * initial support with v2.2 to search keywords (2015-02-15)
+ * add people to custom audiences (2015-04-29)
+ * create and share custom and lookalike audiences (2015-05-08)
+ * get reach estimates (2015-06-05)
+ * update to v2.3 without any major impact on available functionality (2015-06-18)
+ * create and read images, creatives, ads, adsets and campaigns (2015-06-18)
+ * first steps with the Insights API access (2015-07-08)
+ * full support for the adreportstats API endpoint (2015-07-09)
+ * drop requiring the "fbacc" argument in fbRads functions (2015-07-21)
+ * update to v2.4 (2015-07-22)
+ * batch query to read ad attributes (2015-07-28)
+ * update ads, adsets and campaigns (2015-07-29)
+ * support for the adstatistics API endpoint (2015-08-11)
+ * batched listing of ads, adsets and campaigns (2015-08-12)
+ * improved support for the Insights API (2015-09-28, 2015-10-06, 2015-10-20)
+ * remove members from custom audience (2016-01-19)
+ * support for v2.5 (2016-01-19, 2016-03-01, 2016-03-02)
